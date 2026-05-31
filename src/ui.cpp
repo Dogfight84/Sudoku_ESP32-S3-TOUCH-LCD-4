@@ -20,6 +20,7 @@ static void showGame();
 static void showPause();
 static void showWin();
 static void showRestoreDialog();
+static void flushSave();
 
 // ===================== stato schermata di gioco =====================
 static lv_obj_t *g_cell[81];
@@ -31,6 +32,10 @@ static sudoku::Difficulty g_pendingDiff = sudoku::Difficulty::Medium; // livello
 static lv_obj_t *g_timerLabel = nullptr;
 static lv_timer_t *g_tick = nullptr;
 static lv_timer_t *g_flash = nullptr;
+static lv_timer_t *g_saveTimer = nullptr;   // debounce dell'autosalvataggio NVS
+static bool        g_saveDirty = false;
+static uint32_t    g_cellSig[81];           // "firma" per cella: ridisegna solo se cambia
+static int8_t      g_numDone[10];           // stato 'cifra completata' per tasto (evita invalidazioni)
 
 static const int CELL = 38;       // lato cella (px)
 static const int BLOCKGAP = 4;    // gap extra ai confini 3x3
@@ -51,9 +56,40 @@ static const char *difName(sudoku::Difficulty d) {
     return i18n::tr(i18n::K_MEDIUM);
 }
 
+// --- Autosalvataggio "debounced" -------------------------------------------
+// La scrittura NVS (flash) disabilita la cache e fa andare in underrun la DMA
+// del pannello RGB -> screen drift. Quindi NON salviamo ad ogni mossa: marchiamo
+// lo stato "sporco" e scriviamo ~1.5s dopo l'ultima mossa (a tocchi fermi) o
+// alle transizioni di schermata (flushSave in killTimers).
+static void writeSaveIfDirty() {
+    if (g_saveDirty && S &&
+        (S->state() == sudoku::GameState::Playing || S->state() == sudoku::GameState::Paused)) {
+        storage::saveGame(S->snapshot());
+    }
+    g_saveDirty = false;
+}
+
+static void save_timer_cb(lv_timer_t *t) {
+    writeSaveIfDirty();
+    g_saveTimer = nullptr;
+    lv_timer_del(t);
+}
+
+static void scheduleSave() {
+    g_saveDirty = true;
+    if (g_saveTimer) lv_timer_reset(g_saveTimer);     // rimanda: salva solo a tocchi fermi
+    else g_saveTimer = lv_timer_create(save_timer_cb, 1500, nullptr);
+}
+
+static void flushSave() {
+    if (g_saveTimer) { lv_timer_del(g_saveTimer); g_saveTimer = nullptr; }
+    writeSaveIfDirty();
+}
+
 static void killTimers() {
     if (g_tick)  { lv_timer_del(g_tick);  g_tick = nullptr; }
     if (g_flash) { lv_timer_del(g_flash); g_flash = nullptr; }
+    flushSave();   // persiste un eventuale salvataggio in sospeso prima di cambiare schermata
 }
 
 // stile comune: niente bordo/pad/scroll, raggio piccolo
@@ -93,20 +129,36 @@ static void refreshGame() {
     for (int i = 0; i < 81; i++) {
         uint8_t v = S->board().value(i);
         uint16_t notes = S->board().notes(i);
+        bool given = S->board().isGiven(i);
+        int r = i / 9, c = i % 9;
+
+        uint8_t bgstate = 0;  // 0 normale, 1 peer, 2 stesso numero, 3 selezionata
+        bool peer = (sel >= 0) &&
+                    (r == selR || c == selC ||
+                     ((r / 3) == (selR / 3) && (c / 3) == (selC / 3)));
+        bool same = (selVal > 0 && v == selVal);
+        if (peer) bgstate = 1;
+        if (same) bgstate = 2;
+        if (i == sel) bgstate = 3;
+
+        // Firma della cella: se invariata, NON tocchiamo nulla (niente invalidazione
+        // -> niente ridisegno). Cosi' toccando la stessa cella si ridisegna solo quella.
+        uint32_t sig = (uint32_t)bgstate | ((uint32_t)given << 2) |
+                       ((uint32_t)v << 3) | ((uint32_t)notes << 8);
+        if (sig == g_cellSig[i]) continue;
+        g_cellSig[i] = sig;
+
         if (v) {
             t[0] = (char)('0' + v);
             lv_label_set_text(g_cellLabel[i], t);
             lv_obj_set_style_text_font(g_cellLabel[i], &lv_font_montserrat_28, 0);
             lv_obj_set_style_text_color(g_cellLabel[i],
-                S->board().isGiven(i) ? theme::ink() : theme::userNum(), 0);
+                given ? theme::ink() : theme::userNum(), 0);
         } else if (notes) {
             buildNotesText(notes, notesBuf);
             lv_label_set_text(g_cellLabel[i], notesBuf);
-            // font monospaziato: ogni riga e' larga esattamente 5 caratteri,
-            // quindi i candidati restano allineati in una griglia 3x3 pulita
             lv_obj_set_style_text_font(g_cellLabel[i], &lv_font_unscii_8, 0);
             lv_obj_set_style_text_line_space(g_cellLabel[i], 2, 0);
-            // comprime le colonne (font monospaziato) per lasciare margine dai bordi
             lv_obj_set_style_text_letter_space(g_cellLabel[i], -3, 0);
             lv_obj_set_style_text_align(g_cellLabel[i], LV_TEXT_ALIGN_CENTER, 0);
             lv_obj_set_style_text_color(g_cellLabel[i], theme::noteInk(), 0);
@@ -114,22 +166,19 @@ static void refreshGame() {
             lv_label_set_text(g_cellLabel[i], "");
         }
 
-        int r = i / 9, c = i % 9;
         lv_color_t bg = theme::cell();
-        bool peer = (sel >= 0) &&
-                    (r == selR || c == selC ||
-                     ((r / 3) == (selR / 3) && (c / 3) == (selC / 3)));
-        bool same = (selVal > 0 && v == selVal);
-        if (peer) bg = theme::peer();
-        if (same) bg = theme::same();
-        if (i == sel) bg = theme::cellSel();
+        if (bgstate == 1) bg = theme::peer();
+        else if (bgstate == 2) bg = theme::same();
+        else if (bgstate == 3) bg = theme::cellSel();
         lv_obj_set_style_bg_color(g_cell[i], bg, 0);
     }
 
-    // Tasti del tastierino: spegni la cifra completata (9 piazzamenti corretti).
+    // Tasti del tastierino: aggiorna solo quando lo stato "completato" cambia.
     for (int d = 1; d <= 9; d++) {
         if (!g_numBtn[d]) continue;
-        bool done = S->board().isDigitComplete((uint8_t)d);
+        int8_t done = S->board().isDigitComplete((uint8_t)d) ? 1 : 0;
+        if (done == g_numDone[d]) continue;
+        g_numDone[d] = done;
         lv_obj_set_style_opa(g_numBtn[d], done ? LV_OPA_40 : LV_OPA_COVER, 0);
         if (done) lv_obj_clear_flag(g_numBtn[d], LV_OBJ_FLAG_CLICKABLE);
         else      lv_obj_add_flag(g_numBtn[d], LV_OBJ_FLAG_CLICKABLE);
@@ -184,14 +233,17 @@ static void num_cb(lv_event_t *e) {
 
     S->enterValue((uint8_t)d);
     if (S->state() == sudoku::GameState::Won) { showWin(); return; }
-    storage::saveGame(S->snapshot());   // autosalvataggio ad ogni mossa (valori)
+    scheduleSave();   // autosalvataggio "debounced" (no scrittura flash ad ogni click -> no drift)
     refreshGame();
     // griglia piena ma non risolta -> lampeggio rosso sulle celle in conflitto
     if (S->board().isComplete()) {
         bool conf[81];
         S->board().conflicts(conf);
         for (int i = 0; i < 81; i++)
-            if (conf[i]) lv_obj_set_style_bg_color(g_cell[i], theme::danger(), 0);
+            if (conf[i]) {
+                lv_obj_set_style_bg_color(g_cell[i], theme::danger(), 0);
+                g_cellSig[i] = 0xFFFFFFFF;   // forza il ripristino al prossimo refreshGame
+            }
         if (g_flash) lv_timer_del(g_flash);
         g_flash = lv_timer_create(flash_clear_cb, 1400, nullptr);
     }
@@ -199,7 +251,8 @@ static void num_cb(lv_event_t *e) {
 
 static void pause_cb(lv_event_t *) {
     S->pause();
-    storage::saveGame(S->snapshot());   // salva per il "riprendi"
+    // Non forziamo una scrittura flash ad ogni pausa (pausa-spam -> drift): se ci sono
+    // mosse non ancora salvate, le persiste comunque flushSave() in killTimers().
     showPause();
 }
 
@@ -302,7 +355,7 @@ static void showMenu() {
     lv_obj_set_style_text_font(recL, &lv_font_montserrat_16, 0);
     lv_obj_align(recL, LV_ALIGN_BOTTOM_MID, 0, -16);
 
-    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_FADE_IN, 150, 0, true);
+    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_NONE, 150, 0, true);
 }
 
 // ===================== DIALOGO RIPRISTINO =====================
@@ -329,7 +382,7 @@ static void showRestoreDialog() {
     lv_obj_set_size(bNew, 300, 56);
     lv_obj_align(bNew, LV_ALIGN_CENTER, 0, 76);
 
-    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_FADE_IN, 120, 0, true);
+    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_NONE, 120, 0, true);
 }
 
 // ===================== GIOCO =====================
@@ -417,10 +470,13 @@ static void showGame() {
         }
     }
 
+    // invalida le cache: la griglia e' appena stata ricreata, va disegnata tutta
+    for (int i = 0; i < 81; i++) g_cellSig[i] = 0xFFFFFFFF;
+    for (int d = 0; d < 10; d++) g_numDone[d] = -1;
     refreshGame();
     g_tick = lv_timer_create(tick_cb, 250, nullptr);
 
-    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_FADE_IN, 120, 0, true);
+    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_NONE, 120, 0, true);
 }
 
 // ===================== PAUSA =====================
@@ -443,7 +499,7 @@ static void showPause() {
     lv_obj_set_style_text_font(s, &lv_font_montserrat_18, 0);
     lv_obj_align(s, LV_ALIGN_CENTER, 0, 40);
 
-    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_FADE_IN, 120, 0, true);
+    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_NONE, 120, 0, true);
 }
 
 // ===================== VITTORIA =====================
@@ -486,7 +542,7 @@ static void showWin() {
     lv_obj_set_size(b, 220, 56);
     lv_obj_align(b, LV_ALIGN_BOTTOM_MID, 0, -40);
 
-    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_FADE_IN, 150, 0, true);
+    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_NONE, 150, 0, true);
 }
 
 // ===================== SPLASH / SCELTA LINGUA =====================
@@ -532,7 +588,7 @@ static void showSplash() {
     lv_obj_set_size(bIt, 280, 54);
     lv_obj_align(bIt, LV_ALIGN_TOP_MID, 0, 384);
 
-    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_FADE_IN, 200, 0, true);
+    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_NONE, 200, 0, true);
 }
 
 // ===================== init =====================

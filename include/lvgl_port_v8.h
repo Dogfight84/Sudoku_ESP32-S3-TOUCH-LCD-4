@@ -74,7 +74,9 @@
  *      - 3: LCD double-buffer & LVGL direct-mode (recommended)
  *
  */
-#define LVGL_PORT_AVOID_TEARING_MODE            (1)
+#define LVGL_PORT_AVOID_TEARING_MODE            (3)  // direct-mode: ridisegna solo le aree
+                                                     // "sporche" (no full-screen+rotazione ad
+                                                     // ogni click) -> meno banda PSRAM -> no drift
 
 #if LVGL_PORT_AVOID_TEARING_MODE != 0
 /**
