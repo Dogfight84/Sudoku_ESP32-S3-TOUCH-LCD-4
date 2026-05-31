@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480" viewBox="0 0 480 480">
+<rect width="480" height="480" rx="22" fill="#0f1115"/>
+<circle cx="240" cy="124" r="90" fill="#d83a3a"/>
+<text x="240" y="124" fill="#e8ebf0" font-size="56" font-weight="700" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">数独</text>
+<text x="240" y="256" fill="#e8ebf0" font-size="46" font-weight="700" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">SUDOKU</text>
+<rect x="100" y="300" width="280" height="54" rx="10" fill="#23304d"/>
+<text x="240" y="327" fill="#e8ebf0" font-size="26" font-weight="600" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">English</text>
+<rect x="100" y="366" width="280" height="54" rx="10" fill="#23304d"/>
+<text x="240" y="393" fill="#e8ebf0" font-size="26" font-weight="600" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">Italiano</text>
+</svg>

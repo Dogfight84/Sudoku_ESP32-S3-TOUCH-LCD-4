@@ -9,5 +9,5 @@
 <text x="240" y="290" fill="#e8ebf0" font-size="26" font-weight="600" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">Difficile</text>
 <rect x="90" y="332" width="300" height="50" rx="10" fill="#5b8cff"/>
 <text x="240" y="357" fill="#e8ebf0" font-size="22" font-weight="600" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">Riprendi partita</text>
-<text x="240" y="452" fill="#8b93a3" font-size="16" font-weight="400" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">Record    F --:--     M 03:21     D --:--</text>
+<text x="240" y="452" fill="#8b93a3" font-size="16" font-weight="400" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">Record  F --:-- M 03:21 D --:--</text>
 </svg>

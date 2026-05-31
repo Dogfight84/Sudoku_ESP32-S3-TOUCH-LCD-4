@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480" viewBox="0 0 480 480">
+<rect width="480" height="480" rx="22" fill="#0f1115"/>
+<text x="240" y="90" fill="#e8ebf0" font-size="46" font-weight="700" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">SUDOKU</text>
+<rect x="90" y="130" width="300" height="56" rx="10" fill="#23304d"/>
+<text x="240" y="158" fill="#e8ebf0" font-size="26" font-weight="600" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">Easy</text>
+<rect x="90" y="196" width="300" height="56" rx="10" fill="#23304d"/>
+<text x="240" y="224" fill="#e8ebf0" font-size="26" font-weight="600" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">Medium</text>
+<rect x="90" y="262" width="300" height="56" rx="10" fill="#23304d"/>
+<text x="240" y="290" fill="#e8ebf0" font-size="26" font-weight="600" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">Hard</text>
+<rect x="90" y="332" width="300" height="50" rx="10" fill="#5b8cff"/>
+<text x="240" y="357" fill="#e8ebf0" font-size="22" font-weight="600" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">Resume game</text>
+<text x="240" y="452" fill="#8b93a3" font-size="16" font-weight="400" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">Best    E --:-- M 03:21 H --:--</text>
+</svg>

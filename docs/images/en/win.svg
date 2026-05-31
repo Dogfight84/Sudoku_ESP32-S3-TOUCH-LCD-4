@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480" viewBox="0 0 480 480">
+<rect width="480" height="480" rx="22" fill="#0f1115"/>
+<text x="240" y="130" fill="#2ecc71" font-size="46" font-weight="700" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">You won!</text>
+<text x="240" y="235" fill="#e8ebf0" font-size="28" font-weight="600" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">Medium  -  03:21</text>
+<text x="240" y="300" fill="#2ecc71" font-size="24" font-weight="600" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">New record!</text>
+<rect x="130" y="392" width="220" height="56" rx="10" fill="#5b8cff"/>
+<text x="240" y="420" fill="#e8ebf0" font-size="28" font-weight="600" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Helvetica, Arial, sans-serif">Menu</text>
+</svg>
