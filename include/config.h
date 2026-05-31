@@ -4,7 +4,7 @@
 // Sudoku Panel - configurazione globale del firmware
 // =============================================================================
 
-#define SUDOKU_FW_VERSION   "0.1.0"
+#define SUDOKU_FW_VERSION   "0.2.0"
 #define SUDOKU_PROJECT_NAME "Sudoku Panel"
 
 // --- Seriale -----------------------------------------------------------------
