@@ -22,6 +22,9 @@ static const char *T[K_COUNT][2] = {
     /* K_CHOOSE_LANG */ { "Choose language", "Scegli la lingua" },
     /* K_SAVED_FOUND */ { "Saved game found", "Partita salvata trovata" },
     /* K_NEW_GAME     */ { "New game",        "Nuova partita" },
+    /* K_AUTOSAVING   */ { "Autosaving...",   "Salvataggio in corso..." },
+    /* K_SAVING       */ { "Saving...",       "Salvataggio..." },
+    /* K_SAVED        */ { "Saved",           "Salvato" },
 };
 
 const char *tr(Key k) {

@@ -37,7 +37,7 @@ standalone firmware, with no WiFi and no cloud dependencies.
 - 🔢 **Smart keypad** — once a digit is correctly placed in all nine cells, its key greys out and stops responding.
 - ⏱️ **Stopwatch** — counts only play time; stops on pause and on win.
 - ⏸️ **Pause** — dims the grid and freezes the clock ("tap to resume"), so you can't peek with the timer stopped.
-- 💾 **Autosave & resume** — the game is saved to NVS after every move, so an unexpected power loss won't lose your progress; on next start, picking a difficulty offers to **resume** the saved game or start a **new** one.
+- 💾 **Autosave & resume** — the game is saved to NVS periodically during play and when you pause (the write runs on a background task so it never disturbs the display); on next start, picking a difficulty offers to **resume** the saved game or start a **new** one.
 - 🏆 **Best times** — fastest time stored per level.
 - ↩️ **Undo** and **highlighting** of the selected cell (row / column / box) and of matching numbers, in distinct colors.
 - 🌐 **Bilingual UI (EN/IT)** — language chosen on the splash screen and persisted in NVS.

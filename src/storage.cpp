@@ -2,6 +2,9 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
 
 #include "config.h"
 
@@ -16,9 +19,33 @@ static const char *KEY_BEST_EASY  = "best_easy";
 static const char *KEY_BEST_MED   = "best_medium";
 static const char *KEY_BEST_HARD  = "best_hard";
 
+// Task dedicato per le scritture NVS: NON si scrive flash dal thread di rendering
+// (LVGL), perche' la scrittura blocca cache/bus e fa andare in underrun la DMA del
+// pannello -> screen drift. Le richieste arrivano via coda; il task scrive in
+// background su core 0, a bassa priorita'.
+static QueueHandle_t s_saveQueue = nullptr;
+
+static void nvsTask(void *) {
+    static Snapshot s;   // 'static': fuori dallo stack del task
+    for (;;) {
+        if (xQueueReceive(s_saveQueue, &s, portMAX_DELAY) == pdTRUE) {
+            prefs.putBytes(KEY_GAME, &s, sizeof(Snapshot));
+        }
+    }
+}
+
 void begin() {
     // RW. Il namespace viene creato al primo accesso.
     prefs.begin(NVS_NAMESPACE, false);
+    s_saveQueue = xQueueCreate(2, sizeof(Snapshot));
+    // Core 0 (LVGL/Arduino girano su core 1), priorita' bassa (1).
+    xTaskCreatePinnedToCore(nvsTask, "nvsTask", 4096, nullptr, 1, nullptr, 0);
+}
+
+void saveGameAsync(const Snapshot &s) {
+    if (!s_saveQueue) { saveGame(s); return; }
+    // Non bloccante: se la coda e' piena, salta (il prossimo autosave coprira').
+    xQueueSend(s_saveQueue, &s, 0);
 }
 
 // --- Validazione del payload letto da NVS ---------------------------------

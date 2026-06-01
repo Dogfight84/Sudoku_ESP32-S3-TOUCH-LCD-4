@@ -37,7 +37,7 @@ firmware standalone, senza WiFi né dipendenze cloud.
 - 🔢 **Tastierino intelligente** — quando una cifra è piazzata correttamente in tutte e nove le celle, il suo tasto si spegne e smette di rispondere.
 - ⏱️ **Cronometro** — conta solo il tempo di gioco; si ferma in pausa e alla vittoria.
 - ⏸️ **Pausa** — oscura la griglia e ferma il tempo ("tocca per riprendere"), così non si può sbirciare a cronometro fermo.
-- 💾 **Salvataggio automatico e ripresa** — la partita viene salvata in NVS dopo ogni mossa, così uno spegnimento imprevisto non fa perdere i progressi; al riavvio, scegliendo un livello puoi **riprendere** la partita salvata o iniziarne una **nuova**.
+- 💾 **Salvataggio automatico e ripresa** — la partita viene salvata in NVS periodicamente durante il gioco e quando metti in pausa (la scrittura avviene su un task in background, per non disturbare il display); al riavvio, scegliendo un livello puoi **riprendere** la partita salvata o iniziarne una **nuova**.
 - 🏆 **Tempi record** — miglior tempo memorizzato per ogni livello.
 - ↩️ **Annulla** ed **evidenziazione** della cella selezionata (riga / colonna / blocco) e dei numeri uguali, con colori distinti.
 - 🌐 **Interfaccia bilingue (EN/IT)** — lingua scelta nella schermata splash e salvata in NVS.

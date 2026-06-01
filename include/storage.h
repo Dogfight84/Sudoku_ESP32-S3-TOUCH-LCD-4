@@ -13,6 +13,9 @@ void begin();
 // --- Partita in corso ---
 bool hasSavedGame();
 void saveGame(const sudoku::GameSession::Snapshot &s);
+// Come saveGame ma asincrono: accoda la scrittura a un task dedicato (core 0),
+// cosi' il thread di rendering non si blocca e la DMA del display non va in underrun.
+void saveGameAsync(const sudoku::GameSession::Snapshot &s);
 // Carica e VALIDA il payload (cifre, difficolta', flag). False se assente/corrotto.
 bool loadGame(sudoku::GameSession::Snapshot &out);
 void clearSavedGame();

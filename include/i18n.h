@@ -12,6 +12,8 @@ enum Key {
     K_RECORDS_FMT,        // printf con 3 %s (record Facile/Medio/Difficile)
     K_CHOOSE_LANG,
     K_SAVED_FOUND, K_NEW_GAME,
+    K_AUTOSAVING,
+    K_SAVING, K_SAVED,
     K_COUNT
 };
 

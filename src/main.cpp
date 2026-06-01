@@ -12,6 +12,7 @@
 #include <ESP_Panel_Library.h>
 #include <ESP_IOExpander_Library.h>
 #include <esp_random.h>
+#include <esp_lcd_panel_rgb.h>
 #include <lvgl.h>
 
 #include "lvgl_port_v8.h"
@@ -19,6 +20,7 @@
 #include "storage.h"
 #include "game_session.h"
 #include "ui.h"
+#include "debug.h"
 
 // ---------------------------------------------------------------------------
 // IO expander - sequenza Waveshare per accendere LCD/backlight/touch
@@ -42,6 +44,16 @@ static uint32_t deviceRand(uint32_t maxExclusive) {
 static uint32_t clockMs() { return millis(); }
 
 static sudoku::GameSession session(deviceRand, clockMs);
+
+// Ri-sincronizza il pannello RGB: dopo una scrittura flash (NVS) l'ISR del bounce
+// buffer resta bloccata e la DMA va in underrun -> l'immagine "scorre" (drift).
+// Riavviare la trasmissione RGB ri-aggancia lo scan e azzera il drift. Chiamata
+// dalla UI subito dopo ogni salvataggio NVS.
+void displayResync() {
+    if (panel && panel->getLcd()) {
+        esp_lcd_rgb_panel_restart(panel->getLcd()->getHandle());
+    }
+}
 
 void setup() {
     Serial.begin(SERIAL_BAUD);
@@ -94,9 +106,13 @@ void setup() {
     lvgl_port_unlock();
 
     Serial.println("=== setup completato ===");
+    DBG("setup-done");
 }
 
 void loop() {
+    // Heartbeat memoria ogni 5s (diagnostica drift / leak / frammentazione).
+    static uint32_t lastbeat = 0;
+    if (millis() - lastbeat >= 5000) { lastbeat = millis(); DBG("heartbeat"); }
     // Il task LVGL del port esegue lv_timer_handler; qui basta non affamarlo.
-    delay(100);
+    delay(50);
 }

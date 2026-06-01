@@ -8,6 +8,11 @@
 #include "storage.h"
 #include "i18n.h"
 #include "fonts_extra.h"
+#include "debug.h"
+
+// Definita in main.cpp: riavvia la trasmissione del pannello RGB per azzerare il
+// drift dopo una scrittura flash. Dichiarata a scope globale (NON in namespace ui).
+void displayResync();
 
 namespace ui {
 
@@ -32,8 +37,11 @@ static sudoku::Difficulty g_pendingDiff = sudoku::Difficulty::Medium; // livello
 static lv_obj_t *g_timerLabel = nullptr;
 static lv_timer_t *g_tick = nullptr;
 static lv_timer_t *g_flash = nullptr;
-static lv_timer_t *g_saveTimer = nullptr;   // debounce dell'autosalvataggio NVS
-static bool        g_saveDirty = false;
+static lv_timer_t *g_autosaveTimer = nullptr;  // autosave periodico (60s)
+static lv_obj_t   *g_saveStatus = nullptr;     // label di stato nell'header ("Salvataggio.../Salvato")
+static lv_timer_t *g_saveStatusTimer = nullptr;// nasconde "Salvato" dopo 5s
+static bool        g_saveDirty = false;        // ci sono mosse non ancora salvate
+static bool        g_justSaved = false;        // mostra "Salvato" nell'header alla ricostruzione
 static uint32_t    g_cellSig[81];           // "firma" per cella: ridisegna solo se cambia
 static int8_t      g_numDone[10];           // stato 'cifra completata' per tasto (evita invalidazioni)
 
@@ -56,39 +64,53 @@ static const char *difName(sudoku::Difficulty d) {
     return i18n::tr(i18n::K_MEDIUM);
 }
 
-// --- Autosalvataggio "debounced" -------------------------------------------
-// La scrittura NVS (flash) disabilita la cache e fa andare in underrun la DMA
-// del pannello RGB -> screen drift. Quindi NON salviamo ad ogni mossa: marchiamo
-// lo stato "sporco" e scriviamo ~1.5s dopo l'ultima mossa (a tocchi fermi) o
-// alle transizioni di schermata (flushSave in killTimers).
-static void writeSaveIfDirty() {
-    if (g_saveDirty && S &&
-        (S->state() == sudoku::GameState::Playing || S->state() == sudoku::GameState::Paused)) {
-        storage::saveGame(S->snapshot());
+// --- Autosalvataggio periodico (ogni 60s) ----------------------------------
+// La scrittura NVS (flash) blocca per decine di ms l'ISR del bounce buffer del
+// pannello RGB -> underrun DMA -> drift, che NON si azzera "in posto". L'unica
+// cosa che lo elimina e' il caricamento di una schermata (come fa la pausa).
+// Strategia: salviamo di rado (ogni minuto), poi RICARICHIAMO la schermata di
+// gioco (azzera il drift) e mostriamo "Salvato" in alto per 5s.
+static void showGame();   // (gia' dichiarata sopra; usata qui per la ricarica)
+
+static void writeSaveNow() {
+    if (!S) return;
+    sudoku::GameState st = S->state();
+    if (st != sudoku::GameState::Playing && st != sudoku::GameState::Paused) {
+        g_saveDirty = false;
+        return;
     }
+    storage::saveGameAsync(S->snapshot());   // scrittura su task dedicato: niente blocco del rendering
     g_saveDirty = false;
+    DBG("NVS save queued");
 }
 
-static void save_timer_cb(lv_timer_t *t) {
-    writeSaveIfDirty();
-    g_saveTimer = nullptr;
+static void saveStatusHide_cb(lv_timer_t *t) {
+    if (g_saveStatus) lv_label_set_text(g_saveStatus, "");
+    g_saveStatusTimer = nullptr;
     lv_timer_del(t);
 }
 
-static void scheduleSave() {
-    g_saveDirty = true;
-    if (g_saveTimer) lv_timer_reset(g_saveTimer);     // rimanda: salva solo a tocchi fermi
-    else g_saveTimer = lv_timer_create(save_timer_cb, 1500, nullptr);
+static void autosave_tick_cb(lv_timer_t *) {
+    if (!g_saveDirty || !S || S->state() != sudoku::GameState::Playing) return;
+    writeSaveNow();   // accoda la scrittura (async): niente blocco, niente ricarica schermata
+    if (g_saveStatus) {
+        lv_label_set_text(g_saveStatus, i18n::tr(i18n::K_SAVED));
+        lv_obj_set_style_text_color(g_saveStatus, theme::good(), 0);
+        if (g_saveStatusTimer) lv_timer_del(g_saveStatusTimer);
+        g_saveStatusTimer = lv_timer_create(saveStatusHide_cb, 5000, nullptr);
+    }
 }
 
-static void flushSave() {
-    if (g_saveTimer) { lv_timer_del(g_saveTimer); g_saveTimer = nullptr; }
-    writeSaveIfDirty();
+static void flushSave() {      // salvataggio silenzioso (pausa / uscita dal gioco)
+    if (g_saveDirty) writeSaveNow();
 }
 
 static void killTimers() {
     if (g_tick)  { lv_timer_del(g_tick);  g_tick = nullptr; }
     if (g_flash) { lv_timer_del(g_flash); g_flash = nullptr; }
+    if (g_autosaveTimer) { lv_timer_del(g_autosaveTimer); g_autosaveTimer = nullptr; }
+    if (g_saveStatusTimer) { lv_timer_del(g_saveStatusTimer); g_saveStatusTimer = nullptr; }
+    g_saveStatus = nullptr;   // verra' ricreato dalla schermata di gioco
     flushSave();   // persiste un eventuale salvataggio in sospeso prima di cambiare schermata
 }
 
@@ -201,6 +223,7 @@ static void flash_clear_cb(lv_timer_t *t) {
 
 static void cell_cb(lv_event_t *e) {
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
+    DBG("tap cell %d", idx);
     S->selectCell(idx);
     refreshGame();
 }
@@ -214,6 +237,7 @@ static void notes_cb(lv_event_t *) {
 
 static void num_cb(lv_event_t *e) {
     int d = (int)(intptr_t)lv_event_get_user_data(e);   // 0 = cancella
+    DBG("num d=%d notes=%d", d, (int)g_notesMode);
 
     if (g_notesMode) {
         int sel = S->selectedCell();
@@ -233,7 +257,7 @@ static void num_cb(lv_event_t *e) {
 
     S->enterValue((uint8_t)d);
     if (S->state() == sudoku::GameState::Won) { showWin(); return; }
-    scheduleSave();   // autosalvataggio "debounced" (no scrittura flash ad ogni click -> no drift)
+    g_saveDirty = true;   // salvato dall'autosave periodico (60s) o alla pausa/uscita
     refreshGame();
     // griglia piena ma non risolta -> lampeggio rosso sulle celle in conflitto
     if (S->board().isComplete()) {
@@ -250,32 +274,38 @@ static void num_cb(lv_event_t *e) {
 }
 
 static void pause_cb(lv_event_t *) {
+    DBG("btn pause");
     S->pause();
     // Non forziamo una scrittura flash ad ogni pausa (pausa-spam -> drift): se ci sono
     // mosse non ancora salvate, le persiste comunque flushSave() in killTimers().
     showPause();
 }
 
-static void new_cb(lv_event_t *) { showMenu(); }
+static void new_cb(lv_event_t *) { DBG("btn MENU"); showMenu(); }
 
 static void resume_cb(lv_event_t *) {
+    DBG("btn resume");
     S->resume();
     showGame();
 }
 
 static void diff_cb(lv_event_t *e) {
     int d = (int)(intptr_t)lv_event_get_user_data(e);
+    DBG("btn diff %d", d);
     // Se c'e' una partita salvata, chiedi se riprenderla o iniziarne una nuova.
     if (storage::hasSavedGame()) {
         g_pendingDiff = (sudoku::Difficulty) d;
         showRestoreDialog();
         return;
     }
+    uint32_t t0 = millis();
     S->newGame((sudoku::Difficulty)d);
+    DBG("newGame %lums", (unsigned long)(millis() - t0));
     showGame();
 }
 
 static void resumeSaved_cb(lv_event_t *) {
+    DBG("btn resume-saved");
     sudoku::GameSession::Snapshot snap;
     if (storage::loadGame(snap) && S->restore(snap)) {
         S->resume();
@@ -287,7 +317,9 @@ static void resumeSaved_cb(lv_event_t *) {
 // dal livello scelto (memorizzato in g_pendingDiff).
 static void newPending_cb(lv_event_t *) {
     storage::clearSavedGame();
+    uint32_t t0 = millis();
     S->newGame(g_pendingDiff);
+    DBG("newGame(pending) %lums", (unsigned long)(millis() - t0));
     showGame();
 }
 
@@ -403,6 +435,13 @@ static void showGame() {
     lv_obj_set_style_text_font(g_timerLabel, &lv_font_montserrat_28, 0);
     lv_obj_align(g_timerLabel, LV_ALIGN_LEFT_MID, 14, 0);
 
+    // Stato salvataggio ("Salvataggio..." / "Salvato") al centro dell'header
+    g_saveStatus = lv_label_create(bar);
+    lv_label_set_text(g_saveStatus, "");
+    lv_obj_set_style_text_font(g_saveStatus, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(g_saveStatus, theme::muted(), 0);
+    lv_obj_align(g_saveStatus, LV_ALIGN_CENTER, 0, 0);
+
     lv_obj_t *bNew = makeButton(bar, "MENU", &lv_font_montserrat_18,
                                 theme::accent2(), new_cb, 0);
     lv_obj_set_size(bNew, 74, 38);
@@ -475,6 +514,15 @@ static void showGame() {
     for (int d = 0; d < 10; d++) g_numDone[d] = -1;
     refreshGame();
     g_tick = lv_timer_create(tick_cb, 250, nullptr);
+    g_autosaveTimer = lv_timer_create(autosave_tick_cb, 60000, nullptr);   // autosave ogni 60s
+
+    // Se appena salvato (ricarica post-autosave), mostra "Salvato" per 5s.
+    if (g_justSaved) {
+        g_justSaved = false;
+        lv_label_set_text(g_saveStatus, i18n::tr(i18n::K_SAVED));
+        lv_obj_set_style_text_color(g_saveStatus, theme::good(), 0);
+        g_saveStatusTimer = lv_timer_create(saveStatusHide_cb, 5000, nullptr);
+    }
 
     lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_NONE, 120, 0, true);
 }
@@ -504,6 +552,7 @@ static void showPause() {
 
 // ===================== VITTORIA =====================
 static void showWin() {
+    DBG("WIN");
     killTimers();
     uint32_t secs = S->elapsedMs() / 1000;
     sudoku::Difficulty d = S->difficulty();

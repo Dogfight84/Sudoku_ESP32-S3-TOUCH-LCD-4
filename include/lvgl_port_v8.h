@@ -74,9 +74,9 @@
  *      - 3: LCD double-buffer & LVGL direct-mode (recommended)
  *
  */
-#define LVGL_PORT_AVOID_TEARING_MODE            (3)  // direct-mode: ridisegna solo le aree
-                                                     // "sporche" (no full-screen+rotazione ad
-                                                     // ogni click) -> meno banda PSRAM -> no drift
+#define LVGL_PORT_AVOID_TEARING_MODE            (1)  // full-refresh: niente flicker. Con la scrittura NVS
+                                                     // spostata su task dedicato (async) il rendering non
+                                                     // si blocca: verifichiamo se il drift e' sparito.
 
 #if LVGL_PORT_AVOID_TEARING_MODE != 0
 /**
@@ -99,7 +99,8 @@
  *      - 270: 270 degree
  *
  */
-#define LVGL_PORT_ROTATION_DEGREE               (180)
+#define LVGL_PORT_ROTATION_DEGREE               (180)  // 180° software: il mirror Y hardware non e'
+                                                       // supportato dal pannello RGB, quindi serve qui.
 
 /**
  * Here, some important configurations will be set based on different anti-tearing modes and rotation angles.
